@@ -3,6 +3,7 @@
    ========================================================== */
 (function () {
   'use strict';
+  let presenting = false;
 
   /* ---------- 1) GALLERY DATA : 25 ภาพ แยกหมวดเด็ดขาด ---------- */
   const CATS = {
@@ -157,6 +158,43 @@
   const scrollBar = document.getElementById('scrollBar');
   const toTop = document.getElementById('toTop');
 
+  /* ---------- 6.5) NARRATION AUDIO : เสียงบรรยายรายหัวข้อ ---------- */
+  const narrationEl = document.getElementById('narration');
+  const narrationBtn = document.getElementById('narrationBtn');
+  const narrationIcon = document.getElementById('narrationIcon');
+  const narrationLabel = document.getElementById('narrationLabel');
+  const narrationAudio = document.getElementById('narrationAudio');
+  let narrationId = null, isNarrating = false, activeSectionId = sections[0].id;
+
+  function sectionLabel(id) { const s = document.getElementById(id); return (s && s.dataset.title) || id; }
+
+  function loadNarration(id) {
+    narrationId = id;
+    narrationAudio.src = `audio/${id}.mp3`;
+    narrationLabel.textContent = sectionLabel(id);
+  }
+  function playNarration(id) {
+    if (id && id !== narrationId) loadNarration(id);
+    narrationAudio.play().catch(() => {
+      narrationLabel.textContent = `ไม่พบไฟล์เสียง: audio/${narrationId}.mp3`;
+    });
+  }
+  narrationBtn.addEventListener('click', () => {
+    if (isNarrating) { narrationAudio.pause(); return; }
+    playNarration(presenting ? sections[slide].id : activeSectionId);
+  });
+  narrationAudio.addEventListener('play', () => { isNarrating = true; narrationEl.classList.add('is-playing'); narrationIcon.textContent = '⏸'; });
+  narrationAudio.addEventListener('pause', () => { isNarrating = false; narrationEl.classList.remove('is-playing'); narrationIcon.textContent = '▶'; });
+  narrationAudio.addEventListener('ended', () => {
+    const idx = sections.findIndex(s => s.id === narrationId);
+    if (idx > -1 && idx < sections.length - 1) {
+      const nextId = sections[idx + 1].id;
+      if (presenting) goto(idx + 1);
+      playNarration(nextId);
+    }
+  });
+  loadNarration(activeSectionId);
+
   function onScroll() {
     const y = window.scrollY, h = document.body.scrollHeight - innerHeight;
     scrollBar.style.width = (h > 0 ? (y / h) * 100 : 0) + '%';
@@ -164,20 +202,30 @@
     let cur = sections[0].id;
     sections.forEach(s => { if (y >= s.offsetTop - 140) cur = s.id; });
     links.forEach(a => a.classList.toggle('is-active', a.getAttribute('href') === '#' + cur));
+    if (cur !== activeSectionId && !presenting) {
+      activeSectionId = cur;
+      isNarrating ? playNarration(cur) : loadNarration(cur);
+    }
   }
   addEventListener('scroll', onScroll, { passive: true }); onScroll();
   toTop.onclick = () => scrollTo({ top: 0, behavior: 'smooth' });
 
   const navMenu = document.getElementById('navMenu');
   document.getElementById('navToggle').onclick = () => navMenu.classList.toggle('open');
-  links.forEach(a => a.addEventListener('click', () => navMenu.classList.remove('open')));
+  links.forEach(a => a.addEventListener('click', () => {
+    navMenu.classList.remove('open');
+    const id = (a.getAttribute('href') || '').replace('#', '');
+    if (!id || !document.getElementById(id)) return;
+    activeSectionId = id;
+    playNarration(id);
+  }));
 
   /* ---------- 7) PRESENTATION MODE ---------- */
   const pctl = document.getElementById('pctl'),
         pFill = document.getElementById('pctlFill'),
         pCount = document.getElementById('pCount'),
         pTitle = document.getElementById('pTitle');
-  let presenting = false, slide = 0, wheelLock = 0;
+  let slide = 0, wheelLock = 0;
 
   function goto(i) {
     slide = Math.max(0, Math.min(i, sections.length - 1));
@@ -194,6 +242,8 @@
       ringFg.style.strokeDashoffset = C;
       setTimeout(() => ringFg.style.strokeDashoffset = C * .10, 180);
     }
+    activeSectionId = s.id;
+    isNarrating ? playNarration(s.id) : loadNarration(s.id);
   }
   function enter() {
     presenting = true; document.body.classList.add('present');
